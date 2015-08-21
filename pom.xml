@@ -10,9 +10,9 @@
     <version>1.580.1</version>
     <relativePath/>
   </parent>
-  <groupId>nouvola-divecloud</groupId>
+  <groupId>org.jenkins-ci.plugins</groupId>
   <artifactId>nouvola-divecloud</artifactId>
-  <version>1.0</version>
+  <version>1.00-SNAPSHOT</version>
   <packaging>hpi</packaging>
 
   <name>Nouvola DiveCloud</name>
@@ -24,22 +24,21 @@
       <url>http://opensource.org/licenses/MIT</url>
     </license>
   </licenses>
-  <!-- If you want this to appear on the wiki page:
+
   <developers>
     <developer>
-      <id>bhacker</id>
-      <name>Bob Q. Hacker</name>
-      <email>bhacker@nowhere.net</email>
+      <id>smacarthur</id>
+      <name>Shawn MacArthur</name>
+      <email>shawn.macarthur@nouvola.com</email>
     </developer>
   </developers>
-  -->
-  <!-- Assuming you want to host on @jenkinsci:
+
   <scm>
-    <connection>scm:git:git://github.com/jenkinsci/${project.artifactId}-plugin.git</connection>
-    <developerConnection>scm:git:git@github.com:jenkinsci/${project.artifactId}-plugin.git</developerConnection>
-    <url>http://github.com/jenkinsci/${project.artifactId}-plugin</url>
+    <connection>scm:git:git://github.com/jenkinsci/nouvola-divecloud-plugin.git</connection>
+    <developerConnection>scm:git:git@github.com:jenkinsci/nouvola-divecloud-plugin.git</developerConnection>
+    <url>http://github.com/jenkinsci/nouvola-divecloud-plugin</url>
   </scm>
-   -->
+
   <repositories>
     <repository>
       <id>repo.jenkins-ci.org</id>
@@ -52,14 +51,5 @@
       <url>http://repo.jenkins-ci.org/public/</url>
     </pluginRepository>
   </pluginRepositories>
-  <!-- If you want to depend on other plugins:
-  <dependencies>
-    <dependency>
-      <groupId>org.jenkins-ci.plugins</groupId>
-      <artifactId>credentials</artifactId>
-      <version>1.9.4</version>
-    </dependency>
-  </dependencies>
-  -->
 
 </project>

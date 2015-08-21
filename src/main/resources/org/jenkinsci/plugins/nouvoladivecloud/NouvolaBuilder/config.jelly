@@ -7,7 +7,7 @@
   <f:entry title="DiveCloud API Key *" field="apiKey">
     <f:textbox />
   </f:entry>
-  <f:entry title="Credentials Encrypted Key (optional)" field="credsPass">
+  <f:entry title="Credentials Encryption Key (optional)" field="credsPass">
     <f:textbox />
   </f:entry>
 </j:jelly>

@@ -1,4 +1,4 @@
-package nouvola.divecloud;
+package org.jenkinsci.plugins.nouvoladivecloud;
 import hudson.Launcher;
 import hudson.Extension;
 import hudson.util.FormValidation;
@@ -20,7 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 
 /**
- * Runs a Nouvola DiveCloud test plan.
+ * Adds the ability to run a Nouvola DiveCloud test plan as a build step.
  *
  * @author Shawn MacArthur
  */
@@ -30,8 +30,6 @@ public class NouvolaBuilder extends Builder {
     private final String apiKey;
     private final String credsPass;
     
-
-    // Fields in config.jelly must match the parameter names in the "DataBoundConstructor"
     @DataBoundConstructor
     public NouvolaBuilder(String planID, String apiKey, String credsPass) {
         this.planID = planID;
@@ -39,9 +37,6 @@ public class NouvolaBuilder extends Builder {
         this.credsPass = credsPass;
     }
 
-    /**
-     * We'll use this from the <tt>config.jelly</tt>.
-     */
     public String getPlanID() {
         return planID;
     }
@@ -54,6 +49,10 @@ public class NouvolaBuilder extends Builder {
         return credsPass;
     }
     
+    
+    /**
+     * Sends a POST request to the Nouvola DiveCloud API version 1 with the specified plan ID, API key, and encryption key (if used). 
+     */
     @Override
     public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener) {
        System.out.println("Performing...");
@@ -69,7 +68,7 @@ public class NouvolaBuilder extends Builder {
 			
 			try{
 		   		HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-    			conn.setRequestMethod("POST");
+				conn.setRequestMethod("POST");
 				conn.setDoOutput(true);
 				conn.setRequestProperty( "Content-Type", "application/x-www-form-urlencoded"); 
 				conn.setRequestProperty( "charset", "utf-8");
@@ -91,7 +90,6 @@ public class NouvolaBuilder extends Builder {
 				writer.close();
 				
 				reader.close();  
-
               }
               catch(IOException ex){
 				System.out.println(ex);
@@ -105,75 +103,43 @@ public class NouvolaBuilder extends Builder {
         return true;
     }
 
-    // Overridden for better type safety.
-    // If your plugin doesn't really define any property on Descriptor,
-    // you don't have to do this.
     @Override
     public DescriptorImpl getDescriptor() {
         return (DescriptorImpl)super.getDescriptor();
     }
 
-    @Extension // This indicates to Jenkins that this is an implementation of an extension point.
+    @Extension
     public static final class DescriptorImpl extends BuildStepDescriptor<Builder> {
-        /**
-         * To persist global configuration information,
-         * simply store it in a field and call save().
-         *
-         * <p>
-         * If you don't want fields to be persisted, use <tt>transient</tt>.
-         */
-        private boolean useFrench;
 
-        /**
-         * In order to load the persisted global configuration, you have to 
-         * call load() in the constructor.
-         */
         public DescriptorImpl() {
             load();
         }
 
-        /**
-         * Performs on-the-fly validation of the form field 'name'.
-         *
-         * @param value
-         *      This parameter receives the value that the user has typed.
-         * @return
-         *      Indicates the outcome of the validation. This is sent to the browser.
-         *      <p>
-         *      Note that returning {@link FormValidation#error(String)} does not
-         *      prevent the form from being saved. It just means that a message
-         *      will be displayed to the user. 
-         */
-        public FormValidation doCheckPlanID(@QueryParameter String value)
-                throws IOException, ServletException {
+        public FormValidation doCheckPlanID(@QueryParameter String value) throws IOException, ServletException {
             if (value.length() == 0)
                 return FormValidation.error("Please set a Plan ID");
             return FormValidation.ok();
         }
 
+        public FormValidation doCheckApiKey(@QueryParameter String value) throws IOException, ServletException {
+            if (value.length() == 0)
+                return FormValidation.error("Please enter your Nouvola API Key");
+            return FormValidation.ok();
+        }
+        
         public boolean isApplicable(Class<? extends AbstractProject> aClass) {
-            // Indicates that this builder can be used with all kinds of project types 
             return true;
         }
 
-        /**
-         * This human readable name is used in the configuration screen.
-         */
         public String getDisplayName() {
             return "Run Nouvola DiveCloud Test";
         }
 
         @Override
         public boolean configure(StaplerRequest req, JSONObject formData) throws FormException {
-            // To persist global configuration information,
-            // set that to properties and call save().
-            useFrench = formData.getBoolean("useFrench");
-            // ^Can also use req.bindJSON(this, formData);
-            //  (easier when there are many fields; need set* methods for this, like setUseFrench)
             save();
             return super.configure(req,formData);
         }
 
     }
 }
-
