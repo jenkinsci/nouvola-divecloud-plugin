@@ -2,6 +2,7 @@ package org.jenkinsci.plugins.nouvoladivecloud;
 import hudson.Launcher;
 import hudson.Extension;
 import hudson.util.FormValidation;
+import hudson.util.Secret;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
 import hudson.model.AbstractProject;
@@ -28,13 +29,13 @@ public class NouvolaBuilder extends Builder {
 
     private final String planID;
     private final String apiKey;
-    private final String credsPass;
+    private final Secret credsPass;
     
     @DataBoundConstructor
     public NouvolaBuilder(String planID, String apiKey, String credsPass) {
         this.planID = planID;
         this.apiKey = apiKey;
-        this.credsPass = credsPass;
+        this.credsPass = Secret.fromString(credsPass);
     }
 
     public String getPlanID() {
@@ -45,7 +46,7 @@ public class NouvolaBuilder extends Builder {
         return apiKey;
     }
     
-    public String getCredsPass() {
+    public Secret getCredsPass() {
         return credsPass;
     }
     
@@ -57,7 +58,7 @@ public class NouvolaBuilder extends Builder {
     public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener) {
        System.out.println("Performing...");
 
-		String urlParameters = "creds_pass=" + credsPass;
+		String urlParameters = "creds_pass=" + Secret.toString(credsPass);
 		byte[] postData       = urlParameters.getBytes( StandardCharsets.UTF_8 );
 		int    postDataLength = postData.length;
 		String request        = "https://divecloud.nouvola.com/api/v1/plans/" + planID + "/run";
