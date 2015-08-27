@@ -16,7 +16,7 @@
   <url>https://wiki.jenkins-ci.org/display/JENKINS/Nouvola+DiveCloud+Plugin</url>
 
   <name>Nouvola DiveCloud</name>
-  <description>Adds a build step to run a Nouvola Divecloud test</description>
+  <description>Adds a build step to run a Nouvola Divecloud performance load test</description>
   <licenses>
     <license>
       <name>MIT License</name>

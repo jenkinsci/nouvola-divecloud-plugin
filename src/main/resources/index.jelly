@@ -3,5 +3,5 @@
   This view is used to render the installed plugins page.
 -->
 <div>
-  This plugin enables you to add a build step which runs Nouvola DiveCloud performance tests.
+  This plugin enables you to add a build step which runs Nouvola DiveCloud performance load tests.
 </div>
