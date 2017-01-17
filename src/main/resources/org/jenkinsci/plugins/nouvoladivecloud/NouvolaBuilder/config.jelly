@@ -10,4 +10,7 @@
   <f:entry title="Credentials Encryption Key (optional)" field="credsPass">
     <f:textbox />
   </f:entry>
+  <f:entry title="Return URL (optional)" field="returnURL">
+    <f:textbox />
+  </f:entry>
 </j:jelly>

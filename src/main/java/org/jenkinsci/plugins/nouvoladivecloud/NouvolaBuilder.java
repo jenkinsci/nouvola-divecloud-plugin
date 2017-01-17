@@ -30,12 +30,14 @@ public class NouvolaBuilder extends Builder {
     private final String planID;
     private final String apiKey;
     private final Secret credsPass;
-    
+    private final String returnURL;
+
     @DataBoundConstructor
-    public NouvolaBuilder(String planID, String apiKey, String credsPass) {
+    public NouvolaBuilder(String planID, String apiKey, String credsPass, String returnURL) {
         this.planID = planID;
         this.apiKey = apiKey;
         this.credsPass = Secret.fromString(credsPass);
+        this.returnURL = returnURL;
     }
 
     public String getPlanID() {
@@ -45,63 +47,175 @@ public class NouvolaBuilder extends Builder {
     public String getApiKey() {
         return apiKey;
     }
-    
+
     public Secret getCredsPass() {
         return credsPass;
     }
-    
-    
+
+    public String getReturnURL() {
+        return returnURL;
+    }
+
     /**
-     * Sends a POST request to the Nouvola DiveCloud API version 1 with the specified plan ID, API key, and encryption key (if used). 
+     *
+     * 1. Send a POST request to register a return URL to Nouvola
+          Divecloud's webhook API for a run event.
+       2. Send a POST request to the Nouvola DiveCloud API
+          version 1 with the specified plan ID, API key, and
+          encryption key (if used).
+       3. Listen for a response from the API and once received
+          Stop and return the result.
      */
     @Override
     public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener) {
-       System.out.println("Performing...");
+        boolean pass = true;
+        listener.getLogger().println("Performing...");
 
-		String urlParameters = "creds_pass=" + Secret.toString(credsPass);
-		byte[] postData       = urlParameters.getBytes( StandardCharsets.UTF_8 );
-		int    postDataLength = postData.length;
-		String request        = "https://divecloud.nouvola.com/api/v1/plans/" + planID + "/run";
+        String urlParameters = "creds_pass=" + Secret.toString(credsPass);
 
-		try{
-			URL url = new URL(request);
-			System.out.println("Connecting to..." + request);
-			
-			try{
-		   		HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-				conn.setRequestMethod("POST");
-				conn.setDoOutput(true);
-				conn.setRequestProperty( "Content-Type", "application/x-www-form-urlencoded"); 
-				conn.setRequestProperty( "charset", "utf-8");
-				conn.setRequestProperty( "x-api", apiKey);
+        String registerUrl   = "http://preproduction.nouvola.com/api/v1/hooks";
+        String triggerUrl = "http://preproduction.nouvola.com/api/v1/plans/" + planID + "/run";
+
+        listener.getLogger().println(returnURL);
+
+        if (!returnURL.isEmpty()){
+
+            // Register the return URL with the webhook service
+            JSONObject registerData = new JSONObject();
+            registerData.put("event", "run_plan");
+            registerData.put("resource_id", planID);
+            registerData.put("url", returnURL);
+
+            try{
+                URL url = new URL(registerUrl);
+                listener.getLogger().println("Connecting to..." + registerUrl);
+
+                try{
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestMethod("POST");
+                    conn.setDoOutput(true);
+                    conn.setRequestProperty( "Content-Type", "application/json");
+                    conn.setRequestProperty( "charset", "utf-8");
+                    conn.setRequestProperty( "x-api", apiKey);
+
+                    OutputStreamWriter writer = new OutputStreamWriter(conn.getOutputStream());
+
+                    writer.write(registerData.toString());
+                    writer.flush();
+
+                    String line;
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+
+                    while ((line = reader.readLine()) != null) {
+                        listener.getLogger().println(line);
+                        // parse JSON here
+                    }
+
+                    writer.close();
+
+                    reader.close();
+                }
+                catch(IOException ex){
+                    listener.getLogger().println(ex);
+                }
+
+            }
+            catch(MalformedURLException ex){
+                listener.getLogger().println(ex);
+            }
+        }
+
+        // Trigger a plan run
+        try{
+            URL url = new URL(triggerUrl);
+            listener.getLogger().println("Connecting to..." + triggerUrl);
+
+            try{
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setDoOutput(true);
+                conn.setRequestProperty( "Content-Type", "application/x-www-form-urlencoded");
+                conn.setRequestProperty( "charset", "utf-8");
+                conn.setRequestProperty( "x-api", apiKey);
 
 
-				OutputStreamWriter writer = new OutputStreamWriter(conn.getOutputStream());
-				
-				writer.write(urlParameters);
-				writer.flush();
-				
-				String line;
-				BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                OutputStreamWriter writer = new OutputStreamWriter(conn.getOutputStream());
 
-				while ((line = reader.readLine()) != null) {
-				    System.out.println(line);
-				}
+                writer.write(urlParameters);
+                writer.flush();
 
-				writer.close();
-				
-				reader.close();  
+                String line;
+                BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+
+                while ((line = reader.readLine()) != null) {
+                    listener.getLogger().println(line);
+                    // parse JSON here
+                }
+
+                writer.close();
+
+                reader.close();
               }
               catch(IOException ex){
-				System.out.println(ex);
-			}
-  
-		}
-		catch(MalformedURLException ex){
-			System.out.println(ex);
-		}
+                listener.getLogger().println(ex);
+                pass = false;
+            }
 
-        return true;
+        }
+        catch(MalformedURLException ex){
+            listener.getLogger().println(ex);
+            pass = false;
+        }
+
+        // listen for a callback
+        if (!returnURL.isEmpty()){
+            try{
+                boolean posted = false;
+                ServerSocket server = new ServerSocket(9999);
+                listener.getLogger().println("Listening on port 9999");
+                while(!posted){
+                    Socket socket = server.accept(); //accept requests
+                    BufferedReader clientSent = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                    BufferedWriter clientResp = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+                    String line = clientSent.readLine();
+                    int contLength = 0;
+                    if(line.contains("POST")){
+                        while(!line.isEmpty()){
+                            listener.getLogger().println(line);
+                            if(line.contains("Content-Length")){
+                                contLength = Integer.parseInt(line.substring(16));
+                            }
+                            line = clientSent.readLine();
+                        }
+                        // Once a line doesn't exist, read the rest of the message
+                        String jsonMsg = "";
+                        int bufChar = 0;
+                        while(contLength > 0){
+                            bufChar = clientSent.read();
+                            char msgChar = (char) bufChar;
+                            jsonMsg = jsonMsg + msgChar;
+                            contLength = contLength - 1;
+                        }
+                        listener.getLogger().println(jsonMsg);
+                        clientResp.write("HTTP/1.1 200 OK\r\n\r\n" + "Accepted");
+                        posted = true;
+                    }
+                    else{
+                        clientResp.write("HTTP/1.1 200 OK\r\n\r\n" + "Accepts POST requests only");
+                    }
+                    clientResp.close();
+                    clientSent.close();
+                    socket.close();
+                }
+            }
+            catch(IOException ex){
+                listener.getLogger().println("Socket server error: " + ex);
+                pass = false;
+            }
+
+        }
+
+        return pass;
     }
 
     @Override
@@ -127,7 +241,7 @@ public class NouvolaBuilder extends Builder {
                 return FormValidation.error("Please enter your Nouvola API Key");
             return FormValidation.ok();
         }
-        
+
         public boolean isApplicable(Class<? extends AbstractProject> aClass) {
             return true;
         }
