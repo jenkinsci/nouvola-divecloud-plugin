@@ -207,6 +207,9 @@ public class NouvolaBuilder extends Builder {
                     clientSent.close();
                     socket.close();
                 }
+		if(server != null){
+		    server.close();
+		}
             }
             catch(IOException ex){
                 listener.getLogger().println("Socket server error: " + ex);
