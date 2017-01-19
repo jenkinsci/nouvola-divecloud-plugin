@@ -172,6 +172,7 @@ public class NouvolaBuilder extends Builder {
             try{
                 boolean posted = false;
                 ServerSocket server = new ServerSocket(9999);
+		server.setSoTimeout(900000);
                 listener.getLogger().println("Listening on port 9999");
                 while(!posted){
                     Socket socket = server.accept(); //accept requests
@@ -211,11 +212,13 @@ public class NouvolaBuilder extends Builder {
 		    server.close();
 		}
             }
+	    catch(SocketTimeoutException ex){
+		listener.getLogger().println("No callback received - timing out. Please check on your test at Nouvola Divecloud");
+	    }
             catch(IOException ex){
                 listener.getLogger().println("Socket server error: " + ex);
                 pass = false;
             }
-
         }
 
         return pass;
