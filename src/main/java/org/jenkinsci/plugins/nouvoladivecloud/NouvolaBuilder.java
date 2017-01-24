@@ -31,13 +31,15 @@ public class NouvolaBuilder extends Builder {
     private final String apiKey;
     private final Secret credsPass;
     private final String returnURL;
+    private final String listenTimeOut;
 
     @DataBoundConstructor
-    public NouvolaBuilder(String planID, String apiKey, String credsPass, String returnURL) {
+    public NouvolaBuilder(String planID, String apiKey, String credsPass, String returnURL, String listenTimeOut) {
         this.planID = planID;
         this.apiKey = apiKey;
         this.credsPass = Secret.fromString(credsPass);
         this.returnURL = returnURL;
+	this.listenTimeOut = listenTimeOut;
     }
 
     public String getPlanID() {
@@ -54,6 +56,10 @@ public class NouvolaBuilder extends Builder {
 
     public String getReturnURL() {
         return returnURL;
+    }
+
+    public String getListenTimeOut() {
+	return listenTimeOut;
     }
 
     /**
@@ -73,20 +79,39 @@ public class NouvolaBuilder extends Builder {
 
         String urlParameters = "creds_pass=" + Secret.toString(credsPass);
 
-        String registerUrl   = "http://preproduction.nouvola.com/api/v1/hooks";
-        String triggerUrl = "http://preproduction.nouvola.com/api/v1/plans/" + planID + "/run";
+        String registerUrl   = "https://divecloud.nouvola.com/api/v1/hooks";
+        String triggerUrl = "https://divecloud.nouvola.com/api/v1/plans/" + planID + "/run";
+	String retURL = "";
+	int listenPort = -1;
 
-        listener.getLogger().println(returnURL);
+        // checks for return URL
+	if (!returnURL.isEmpty()){
+	    try{
+	        URL url = new URL(returnURL);
+	        listenPort = url.getPort();
+	        if( listenPort == -1)
+	            listenPort = 9999; //default to this if there is no port in the url
+	        String protocol = url.getProtocol();
+	        String host = url.getHost();
+	        String path = url.getPath();
+	        retURL = protocol + "://" + host + ":" + listenPort + path;
+	    }
+	    catch(MalformedURLException ex){
+	        listener.getLogger().println("The return URL given is invalid. Skipping webhook registeration. Please check Nouvola Divecloud for test status");
+	    }
+	}
+	else
+	    listener.getLogger().println("No return URL given. Skipping webhook registration. Please check Nouvola Divecloud for test status");
 
-        if (!returnURL.isEmpty()){
+        // Register the return URL with the webhook service
+        if (!retURL.isEmpty()){
 
-            // Register the return URL with the webhook service
             JSONObject registerData = new JSONObject();
             registerData.put("event", "run_plan");
             registerData.put("resource_id", planID);
-            registerData.put("url", returnURL);
+            registerData.put("url", retURL);
 
-            try{
+	    try{
                 URL url = new URL(registerUrl);
                 listener.getLogger().println("Connecting to..." + registerUrl);
 
@@ -108,7 +133,6 @@ public class NouvolaBuilder extends Builder {
 
                     while ((line = reader.readLine()) != null) {
                         listener.getLogger().println(line);
-                        // parse JSON here
                     }
 
                     writer.close();
@@ -117,11 +141,13 @@ public class NouvolaBuilder extends Builder {
                 }
                 catch(IOException ex){
                     listener.getLogger().println(ex);
+		    pass = false;
                 }
 
             }
             catch(MalformedURLException ex){
                 listener.getLogger().println(ex);
+		pass = false;
             }
         }
 
@@ -168,12 +194,15 @@ public class NouvolaBuilder extends Builder {
         }
 
         // listen for a callback
-        if (!returnURL.isEmpty()){
+        if (!retURL.isEmpty()){
             try{
                 boolean posted = false;
-                ServerSocket server = new ServerSocket(9999);
-		server.setSoTimeout(900000);
-                listener.getLogger().println("Listening on port 9999");
+                ServerSocket server = new ServerSocket(listenPort);
+		int timeout = 60; //timeout default is 60 minutes
+		if(!listenTimeOut.isEmpty())
+		    timeout = Integer.parseInt(listenTimeOut);
+		server.setSoTimeout(timeout * 60000);
+                listener.getLogger().println("Listening on port " + listenPort + "...");
                 while(!posted){
                     Socket socket = server.accept(); //accept requests
                     BufferedReader clientSent = new BufferedReader(new InputStreamReader(socket.getInputStream()));
@@ -247,6 +276,16 @@ public class NouvolaBuilder extends Builder {
                 return FormValidation.error("Please enter your Nouvola API Key");
             return FormValidation.ok();
         }
+
+	public FormValidation doCheckListenTimeOut(@QueryParameter String value) throws IOException, ServletException {
+	    try{
+	        Integer.parseInt(value);
+		return FormValidation.ok();
+	    }
+	    catch(NumberFormatException ex){
+		return FormValidation.error("Please enter an integer");
+	    }
+	}
 
         public boolean isApplicable(Class<? extends AbstractProject> aClass) {
             return true;

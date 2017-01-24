@@ -13,4 +13,7 @@
   <f:entry title="Return URL (optional)" field="returnURL">
     <f:textbox />
   </f:entry>
+  <f:entry title="Listening timeout in minutes (optional)" field="listenTimeOut">
+    <f:textbox />
+  </f:entry>
 </j:jelly>
