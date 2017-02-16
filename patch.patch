@@ -1,0 +1,95 @@
+From 816a2a4dd6a6a3f9c9b3818a38c4fa3483c465c1 Mon Sep 17 00:00:00 2001
+From: Nisha Kumar-Mayernik <nkumarm1@jaguarlandrover.com>
+Date: Wed, 15 Feb 2017 14:01:48 -0800
+Subject: [PATCH 1/1] Fixes to mvn:findbugs
+
+- Used UTF-8 and stream encoding
+- Check for readline result being null
+- Used concat instead of +
+
+Signed-off-by: Nisha Kumar-Mayernik <nkumarm1@jaguarlandrover.com>
+---
+ .../plugins/nouvoladivecloud/NouvolaBuilder.java   | 22 +++++++++++++---------
+ 1 file changed, 13 insertions(+), 9 deletions(-)
+
+diff --git a/src/main/java/org/jenkinsci/plugins/nouvoladivecloud/NouvolaBuilder.java b/src/main/java/org/jenkinsci/plugins/nouvoladivecloud/NouvolaBuilder.java
+index dc62f78..a2ba4e9 100644
+--- a/src/main/java/org/jenkinsci/plugins/nouvoladivecloud/NouvolaBuilder.java
++++ b/src/main/java/org/jenkinsci/plugins/nouvoladivecloud/NouvolaBuilder.java
+@@ -122,13 +122,13 @@ public class NouvolaBuilder extends Builder {
+                     conn.setRequestProperty( "charset", "utf-8");
+                     conn.setRequestProperty( "x-api", apiKey);
+ 
+-                    OutputStreamWriter writer = new OutputStreamWriter(conn.getOutputStream());
++                    OutputStreamWriter writer = new OutputStreamWriter(conn.getOutputStream(), "UTF-8");
+ 
+                     writer.write(registerData.toString());
+                     writer.flush();
+ 
+                     String line;
+-                    BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
++                    BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(),"UTF-8"));
+ 
+                     while ((line = reader.readLine()) != null) {
+                         listener.getLogger().println(line);
+@@ -164,13 +164,13 @@ public class NouvolaBuilder extends Builder {
+                 conn.setRequestProperty( "x-api", apiKey);
+ 
+ 
+-                OutputStreamWriter writer = new OutputStreamWriter(conn.getOutputStream());
++                OutputStreamWriter writer = new OutputStreamWriter(conn.getOutputStream(), "UTF-8");
+ 
+                 writer.write(urlParameters);
+                 writer.flush();
+ 
+                 String line;
+-                BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
++                BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+ 
+                 while ((line = reader.readLine()) != null) {
+                     listener.getLogger().println(line);
+@@ -204,17 +204,20 @@ public class NouvolaBuilder extends Builder {
+                 listener.getLogger().println("Listening on port " + listenPort + "...");
+                 while(!posted){
+                     Socket socket = server.accept(); //accept requests
+-                    BufferedReader clientSent = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+-                    BufferedWriter clientResp = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
++                    BufferedReader clientSent = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
++                    BufferedWriter clientResp = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF-8"));
+                     String line = clientSent.readLine();
+-                    int contLength = 0;
+-                    if(line.contains("POST")){
++	 	    int contLength = 0;
++                    if(line != null && line.contains("POST")){
+                         while(!line.isEmpty()){
+                             listener.getLogger().println(line);
+                             if(line.contains("Content-Length")){
+                                 contLength = Integer.parseInt(line.substring(16));
+                             }
+                             line = clientSent.readLine();
++			    if(line == null){
++				line = "";
++			    }
+                         }
+                         // Once a line doesn't exist, read the rest of the message
+                         String jsonMsg = "";
+@@ -222,7 +225,7 @@ public class NouvolaBuilder extends Builder {
+                         while(contLength > 0){
+                             bufChar = clientSent.read();
+                             char msgChar = (char) bufChar;
+-                            jsonMsg = jsonMsg + msgChar;
++                            jsonMsg = jsonMsg.concat(String.valueOf(msgChar));
+                             contLength = contLength - 1;
+                         }
+                         listener.getLogger().println(jsonMsg);
+@@ -232,6 +235,7 @@ public class NouvolaBuilder extends Builder {
+                     else{
+                         clientResp.write("HTTP/1.1 200 OK\r\n\r\n" + "Accepts POST requests only");
+                     }
++		    
+                     clientResp.close();
+                     clientSent.close();
+                     socket.close();
+-- 
+2.7.4
+
