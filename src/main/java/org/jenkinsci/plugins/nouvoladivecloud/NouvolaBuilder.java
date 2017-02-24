@@ -174,14 +174,13 @@ public class NouvolaBuilder extends Builder {
 
                 while ((line = reader.readLine()) != null) {
                     listener.getLogger().println(line);
-                    // parse JSON here
                 }
 
                 writer.close();
 
                 reader.close();
-              }
-              catch(IOException ex){
+            }
+            catch(IOException ex){
                 listener.getLogger().println(ex);
                 pass = false;
             }
@@ -194,20 +193,21 @@ public class NouvolaBuilder extends Builder {
 
         // listen for a callback
         if (!retURL.isEmpty()){
+            String jsonMsg = "";
             try{
                 boolean posted = false;
                 ServerSocket server = new ServerSocket(listenPort);
-		int timeout = 60; //timeout default is 60 minutes
-		if(!listenTimeOut.isEmpty())
-		    timeout = Integer.parseInt(listenTimeOut);
-		server.setSoTimeout(timeout * 60000);
+		        int timeout = 60; //timeout default is 60 minutes
+		        if(!listenTimeOut.isEmpty())
+		            timeout = Integer.parseInt(listenTimeOut);
+		        server.setSoTimeout(timeout * 60000);
                 listener.getLogger().println("Listening on port " + listenPort + "...");
                 while(!posted){
                     Socket socket = server.accept(); //accept requests
                     BufferedReader clientSent = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
                     BufferedWriter clientResp = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF-8"));
                     String line = clientSent.readLine();
-	 	    int contLength = 0;
+	 	            int contLength = 0;
                     if(line != null && line.contains("POST")){
                         while(!line.isEmpty()){
                             listener.getLogger().println(line);
@@ -215,12 +215,11 @@ public class NouvolaBuilder extends Builder {
                                 contLength = Integer.parseInt(line.substring(16));
                             }
                             line = clientSent.readLine();
-			    if(line == null){
-				line = "";
-			    }
+			                if(line == null){
+				                line = "";
+			                }
                         }
                         // Once a line doesn't exist, read the rest of the message
-                        String jsonMsg = "";
                         int bufChar = 0;
                         while(contLength > 0){
                             bufChar = clientSent.read();
@@ -240,13 +239,29 @@ public class NouvolaBuilder extends Builder {
                     clientSent.close();
                     socket.close();
                 }
-		if(server != null){
-		    server.close();
-		}
+		        if(server != null){
+		            server.close();
+		        }
+
+                if(!jsonMsg.isEmpty()){
+                    JSONObject jObj = JSONObject.fromObject(jsonMsg);
+                    if(jObj.getString("outcome").equals("Pass")){
+                        listener.getLogger().println("DiveCloud test passed");
+                        pass = true;
+                    }
+                    else{
+                        listener.getLogger().println("DiveCloud test failed with outcome: " + jObj.getString("outcome"));
+                        pass = false;
+                    }
+                }
+                else{
+                    listener.getLogger().println("DiveCloud test did not return anything");
+                    pass = false;
+                }
             }
-	    catch(SocketTimeoutException ex){
-		listener.getLogger().println("No callback received - timing out. Please check on your test at Nouvola Divecloud");
-	    }
+	        catch(SocketTimeoutException ex){
+		        listener.getLogger().println("No callback received - timing out. Please check on your test at Nouvola Divecloud");
+	        }
             catch(IOException ex){
                 listener.getLogger().println("Socket server error: " + ex);
                 pass = false;
