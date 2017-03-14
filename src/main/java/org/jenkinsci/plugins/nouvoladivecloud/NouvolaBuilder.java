@@ -38,7 +38,7 @@ public class NouvolaBuilder extends Builder {
         this.apiKey = apiKey;
         this.credsPass = Secret.fromString(credsPass);
         this.returnURL = returnURL;
-	this.listenTimeOut = listenTimeOut;
+        this.listenTimeOut = listenTimeOut;
     }
 
     public String getPlanID() {
@@ -80,37 +80,35 @@ public class NouvolaBuilder extends Builder {
 
         String registerUrl   = "https://divecloud.nouvola.com/api/v1/hooks";
         String triggerUrl = "https://divecloud.nouvola.com/api/v1/plans/" + planID + "/run";
-	String retURL = "";
-	int listenPort = -1;
+        String retURL = "";
+        int listenPort = -1;
 
         // checks for return URL
-	if (!returnURL.isEmpty()){
-	    try{
-	        URL url = new URL(returnURL);
-	        listenPort = url.getPort();
-	        if( listenPort == -1)
-	            listenPort = 9999; //default to this if there is no port in the url
-	        String protocol = url.getProtocol();
-	        String host = url.getHost();
-	        String path = url.getPath();
-	        retURL = protocol + "://" + host + ":" + listenPort + path;
-	    }
-	    catch(MalformedURLException ex){
-	        listener.getLogger().println("The return URL given is invalid. Skipping webhook registeration. Please check Nouvola Divecloud for test status");
-	    }
-	}
-	else
-	    listener.getLogger().println("No return URL given. Skipping webhook registration. Please check Nouvola Divecloud for test status");
+        if (!returnURL.isEmpty()){
+            try{
+                URL url = new URL(returnURL);
+                listenPort = url.getPort();
+                if( listenPort == -1) listenPort = 9999; //default to this if there is no port in the url
+                String protocol = url.getProtocol();
+                String host = url.getHost();
+                String path = url.getPath();
+                retURL = protocol + "://" + host + ":" + listenPort + path;
+	        }
+            catch(MalformedURLException ex){
+	            listener.getLogger().println("The return URL given is invalid. Skipping webhook registeration. Please check Nouvola Divecloud for test status");
+            }
+        }
+        else
+            listener.getLogger().println("No return URL given. Skipping webhook registration. Please check Nouvola Divecloud for test status");
 
         // Register the return URL with the webhook service
         if (!retURL.isEmpty()){
-
             JSONObject registerData = new JSONObject();
             registerData.put("event", "run_plan");
             registerData.put("resource_id", planID);
             registerData.put("url", retURL);
 
-	    try{
+            try{
                 URL url = new URL(registerUrl);
                 listener.getLogger().println("Connecting to..." + registerUrl);
 
@@ -140,13 +138,13 @@ public class NouvolaBuilder extends Builder {
                 }
                 catch(IOException ex){
                     listener.getLogger().println(ex);
-		    pass = false;
+                    pass = false;
                 }
 
             }
             catch(MalformedURLException ex){
                 listener.getLogger().println(ex);
-		pass = false;
+                pass = false;
             }
         }
 
