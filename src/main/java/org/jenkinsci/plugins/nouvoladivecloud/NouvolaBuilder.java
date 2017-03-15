@@ -62,6 +62,24 @@ public class NouvolaBuilder extends Builder {
     }
 
     /**
+     * Write to a file
+     * Return an error message if failed else return an empty string
+     */
+    private String writeToFile(String filename, String content){
+        String result = "";
+        try{
+            Writer writer = new BufferedWriter(new OutputStreamWriter(
+                    new FileOutputStream(filename), "UTF-8"));
+            writer.write(content);
+            writer.close();
+        }
+        catch(IOException ex){
+            result = ex.toString();
+        }
+        return result;
+    }
+
+    /**
      *
      * 1. Send a POST request to register a return URL to Nouvola
           Divecloud's webhook API for a run event.
@@ -82,6 +100,7 @@ public class NouvolaBuilder extends Builder {
         String triggerUrl = "https://divecloud.nouvola.com/api/v1/plans/" + planID + "/run";
         String retURL = "";
         int listenPort = -1;
+        String results_file = "results.txt";
 
         // checks for return URL
         if (!returnURL.isEmpty()){
@@ -245,7 +264,18 @@ public class NouvolaBuilder extends Builder {
                     JSONObject jObj = JSONObject.fromObject(jsonMsg);
                     if(jObj.getString("outcome").equals("Pass")){
                         listener.getLogger().println("DiveCloud test passed");
-                        pass = true;
+
+                        // create artifact
+                        String path = build.getProject().getWorkspace().toString() + "/" + results_file;
+                        String writeStatus = writeToFile(path, jsonMsg);
+                        if(!writeStatus.isEmpty()){
+                            listener.getLogger().println("Failed to create artifact: " + writeStatus);
+                            pass = false;
+                        }
+                        else{
+                            listener.getLogger().println("Report ready");
+                            pass = true;
+                        }
                     }
                     else{
                         listener.getLogger().println("DiveCloud test failed with outcome: " + jObj.getString("outcome"));
