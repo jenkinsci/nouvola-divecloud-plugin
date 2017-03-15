@@ -9,6 +9,7 @@ import hudson.model.AbstractProject;
 import hudson.tasks.Builder;
 import hudson.tasks.BuildStepDescriptor;
 import net.sf.json.JSONObject;
+import net.sf.json.JSONException;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.QueryParameter;
@@ -62,6 +63,94 @@ public class NouvolaBuilder extends Builder {
     }
 
     /**
+     * Object for process status and messages
+     */
+    private class ProcessStatus{
+        public boolean pass;
+        public String message;
+
+        public ProcessStatus(boolean pass, String message){
+            this.pass = pass;
+            this.message = message;
+        }
+    }
+
+    /**
+     * Send HTTP request and return a process status
+     */
+    private ProcessStatus sendHTTPRequest(String url,
+                                          String httpAction,
+                                          String apiKey,
+                                          String data){
+        ProcessStatus status = new ProcessStatus(true, "");
+        try{
+            URL urlObj = new URL(url);
+            try{
+                HttpURLConnection conn = (HttpURLConnection) urlObj.openConnection();
+                conn.setRequestMethod(httpAction);
+                conn.setDoOutput(true);
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setRequestProperty("charset", "utf-8");
+                conn.setRequestProperty("x-api", apiKey);
+                
+                if(data != null){
+                    OutputStreamWriter writer = new OutputStreamWriter(conn.getOutputStream(), "UTF-8");
+                    writer.write(data);
+                    writer.flush();
+                }
+
+                BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+                String line;
+                String result = "";
+
+                while ((line = reader.readLine()) != null){
+                    result = result + line;
+
+                }
+                reader.close();
+                if(!result.isEmpty()){
+                    status.message = result;
+                }
+                else{
+                    status.pass = false;
+                    status.message = "Nouvola DiveCloud API " + url + " did not return a result";
+                }
+            }
+            catch(IOException ex){
+                status.pass = false;
+                status.message = ex.toString();
+            }
+        }
+        catch(MalformedURLException ex){
+            status.pass = false;
+            status.message = ex.toString();
+        }
+        return status;
+    }
+
+    /**
+     * Process JSON Strings returned by requests to Nouvola API
+     * test_id is the only one that is an int so we will check for it
+     */
+    private ProcessStatus parseJSONString(String jsonString, String key){
+        ProcessStatus status = new ProcessStatus(true, "");
+        try{
+            JSONObject jObj = JSONObject.fromObject(jsonString);
+            if(key.equals("test_id")){
+                status.message = Integer.toString(jObj.getInt(key));
+            }
+            else{
+                status.message = jObj.getString(key);
+            }
+        }
+        catch(JSONException ex){
+            status.pass = false;
+            status.message = ex.toString();
+        }
+        return status;
+    }
+
+    /**
      * Write to a file
      * Return an error message if failed else return an empty string
      */
@@ -91,13 +180,15 @@ public class NouvolaBuilder extends Builder {
      */
     @Override
     public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener) {
-        boolean pass = true;
+        ProcessStatus status;
+        boolean isWebhook = false;
         listener.getLogger().println("Performing...");
 
         String urlParameters = "creds_pass=" + Secret.toString(credsPass);
 
         String registerUrl   = "https://divecloud.nouvola.com/api/v1/hooks";
         String triggerUrl = "https://divecloud.nouvola.com/api/v1/plans/" + planID + "/run";
+        String pollUrl = "https://divecloud.nouvola.com/api/v1/test_instances/";
         String retURL = "";
         int listenPort = -1;
         String results_file = "results.txt";
@@ -112,104 +203,36 @@ public class NouvolaBuilder extends Builder {
                 String host = url.getHost();
                 String path = url.getPath();
                 retURL = protocol + "://" + host + ":" + listenPort + path;
+                isWebhook = true;
 	        }
             catch(MalformedURLException ex){
-	            listener.getLogger().println("The return URL given is invalid. Skipping webhook registeration. Please check Nouvola Divecloud for test status");
+	            listener.getLogger().println("The return URL given is invalid. Polling Divecloud instead.");
             }
         }
-        else
-            listener.getLogger().println("No return URL given. Skipping webhook registration. Please check Nouvola Divecloud for test status");
 
         // Register the return URL with the webhook service
-        if (!retURL.isEmpty()){
+        if (isWebhook){
             JSONObject registerData = new JSONObject();
             registerData.put("event", "run_plan");
             registerData.put("resource_id", planID);
             registerData.put("url", retURL);
-
-            try{
-                URL url = new URL(registerUrl);
-                listener.getLogger().println("Connecting to..." + registerUrl);
-
-                try{
-                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                    conn.setRequestMethod("POST");
-                    conn.setDoOutput(true);
-                    conn.setRequestProperty( "Content-Type", "application/json");
-                    conn.setRequestProperty( "charset", "utf-8");
-                    conn.setRequestProperty( "x-api", apiKey);
-
-                    OutputStreamWriter writer = new OutputStreamWriter(conn.getOutputStream(), "UTF-8");
-
-                    writer.write(registerData.toString());
-                    writer.flush();
-
-                    String line;
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(),"UTF-8"));
-
-                    while ((line = reader.readLine()) != null) {
-                        listener.getLogger().println(line);
-                    }
-
-                    writer.close();
-
-                    reader.close();
-                }
-                catch(IOException ex){
-                    listener.getLogger().println(ex);
-                    pass = false;
-                }
-
-            }
-            catch(MalformedURLException ex){
-                listener.getLogger().println(ex);
-                pass = false;
+            listener.getLogger().println("Connecting to..." + registerUrl);
+            status = sendHTTPRequest(registerUrl, "POST", apiKey, registerData.toString());
+            if(!status.pass){
+                listener.getLogger().println("Registration failed: " + status.message);
+                return status.pass;
             }
         }
 
         // Trigger a plan run
-        try{
-            URL url = new URL(triggerUrl);
-            listener.getLogger().println("Connecting to..." + triggerUrl);
-
-            try{
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("POST");
-                conn.setDoOutput(true);
-                conn.setRequestProperty( "Content-Type", "application/x-www-form-urlencoded");
-                conn.setRequestProperty( "charset", "utf-8");
-                conn.setRequestProperty( "x-api", apiKey);
-
-
-                OutputStreamWriter writer = new OutputStreamWriter(conn.getOutputStream(), "UTF-8");
-
-                writer.write(urlParameters);
-                writer.flush();
-
-                String line;
-                BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
-
-                while ((line = reader.readLine()) != null) {
-                    listener.getLogger().println(line);
-                }
-
-                writer.close();
-
-                reader.close();
-            }
-            catch(IOException ex){
-                listener.getLogger().println(ex);
-                pass = false;
-            }
-
-        }
-        catch(MalformedURLException ex){
-            listener.getLogger().println(ex);
-            pass = false;
+        status = sendHTTPRequest(triggerUrl, "POST", apiKey, null);
+        if(!status.pass){
+            listener.getLogger().println("Triggering testplan failed: " + status.message);
+            return status.pass;
         }
 
         // listen for a callback
-        if (!retURL.isEmpty()){
+        if (isWebhook){
             String jsonMsg = "";
             try{
                 boolean posted = false;
@@ -261,30 +284,28 @@ public class NouvolaBuilder extends Builder {
 		        }
 
                 if(!jsonMsg.isEmpty()){
-                    JSONObject jObj = JSONObject.fromObject(jsonMsg);
-                    if(jObj.getString("outcome").equals("Pass")){
+                    status = parseJSONString(jsonMsg, "outcome");
+                    if(status.pass && status.message.equals("Pass")){
                         listener.getLogger().println("DiveCloud test passed");
 
                         // create artifact
                         String path = build.getProject().getWorkspace().toString() + "/" + results_file;
                         String writeStatus = writeToFile(path, jsonMsg);
                         if(!writeStatus.isEmpty()){
-                            listener.getLogger().println("Failed to create artifact: " + writeStatus);
-                            pass = false;
+                            status.pass = false;
+                            status.message = "Failed to create artifact: " + writeStatus;
+                            listener.getLogger().println(status.message);
                         }
-                        else{
-                            listener.getLogger().println("Report ready");
-                            pass = true;
-                        }
+                        listener.getLogger().println("Report ready");
                     }
                     else{
-                        listener.getLogger().println("DiveCloud test failed with outcome: " + jObj.getString("outcome"));
-                        pass = false;
+                        listener.getLogger().println("DiveCloud test failed: " + status.message);
                     }
                 }
                 else{
-                    listener.getLogger().println("DiveCloud test did not return anything");
-                    pass = false;
+                    status.pass = false;
+                    status.message = "DiveCloud test did not return anything - empty JSON message";
+                    listener.getLogger().println(status.message);
                 }
             }
 	        catch(SocketTimeoutException ex){
@@ -292,11 +313,11 @@ public class NouvolaBuilder extends Builder {
 	        }
             catch(IOException ex){
                 listener.getLogger().println("Socket server error: " + ex);
-                pass = false;
+                status.pass = false;
             }
         }
 
-        return pass;
+        return status.pass;
     }
 
     @Override
