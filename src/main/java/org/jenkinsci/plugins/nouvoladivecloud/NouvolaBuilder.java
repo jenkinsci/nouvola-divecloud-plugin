@@ -30,14 +30,21 @@ public class NouvolaBuilder extends Builder {
     private final String planID;
     private final String apiKey;
     private final Secret credsPass;
+    private final String pollInterval;
     private final String returnURL;
     private final String listenTimeOut;
 
     @DataBoundConstructor
-    public NouvolaBuilder(String planID, String apiKey, String credsPass, String returnURL, String listenTimeOut) {
+    public NouvolaBuilder(String planID,
+                          String apiKey,
+                          String credsPass,
+                          String pollInterval,
+                          String returnURL,
+                          String listenTimeOut) {
         this.planID = planID;
         this.apiKey = apiKey;
         this.credsPass = Secret.fromString(credsPass);
+        this.pollInterval = pollInterval;
         this.returnURL = returnURL;
         this.listenTimeOut = listenTimeOut;
     }
@@ -52,6 +59,10 @@ public class NouvolaBuilder extends Builder {
 
     public Secret getCredsPass() {
         return credsPass;
+    }
+
+    public String getPollInterval(){
+        return pollInterval;
     }
 
     public String getReturnURL() {
@@ -182,18 +193,17 @@ public class NouvolaBuilder extends Builder {
     public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener) {
         ProcessStatus status;
         boolean isWebhook = false;
-        listener.getLogger().println("Performing...");
-
         String urlParameters = "creds_pass=" + Secret.toString(credsPass);
-
         String registerUrl   = "https://divecloud.nouvola.com/api/v1/hooks";
         String triggerUrl = "https://divecloud.nouvola.com/api/v1/plans/" + planID + "/run";
         String pollUrl = "https://divecloud.nouvola.com/api/v1/test_instances/";
+        String testId = "";
         String retURL = "";
         int listenPort = -1;
         String results_file = "results.txt";
 
         // checks for return URL
+        listener.getLogger().println("Checking return URL...");
         if (!returnURL.isEmpty()){
             try{
                 URL url = new URL(returnURL);
@@ -203,6 +213,7 @@ public class NouvolaBuilder extends Builder {
                 String host = url.getHost();
                 String path = url.getPath();
                 retURL = protocol + "://" + host + ":" + listenPort + path;
+                listener.getLogger().println("Return URL OK");
                 isWebhook = true;
 	        }
             catch(MalformedURLException ex){
@@ -212,6 +223,7 @@ public class NouvolaBuilder extends Builder {
 
         // Register the return URL with the webhook service
         if (isWebhook){
+            listener.getLogger().println("Registering URL: " + retURL);
             JSONObject registerData = new JSONObject();
             registerData.put("event", "run_plan");
             registerData.put("resource_id", planID);
@@ -225,15 +237,22 @@ public class NouvolaBuilder extends Builder {
         }
 
         // Trigger a plan run
+        listener.getLogger().println("Triggering: " + triggerUrl);
         status = sendHTTPRequest(triggerUrl, "POST", apiKey, null);
         if(!status.pass){
             listener.getLogger().println("Triggering testplan failed: " + status.message);
             return status.pass;
         }
+        status = parseJSONString(status.message, "test_id");
+        if(!status.pass){
+            listener.getLogger().println("Could not get a test ID: " + status.message);
+            return status.pass;
+        }
+        testId = status.message;
 
-        // listen for a callback
+        // listen for results
+        String jsonMsg = "";
         if (isWebhook){
-            String jsonMsg = "";
             try{
                 boolean posted = false;
                 ServerSocket server = new ServerSocket(listenPort);
@@ -282,31 +301,6 @@ public class NouvolaBuilder extends Builder {
 		        if(server != null){
 		            server.close();
 		        }
-
-                if(!jsonMsg.isEmpty()){
-                    status = parseJSONString(jsonMsg, "outcome");
-                    if(status.pass && status.message.equals("Pass")){
-                        listener.getLogger().println("DiveCloud test passed");
-
-                        // create artifact
-                        String path = build.getProject().getWorkspace().toString() + "/" + results_file;
-                        String writeStatus = writeToFile(path, jsonMsg);
-                        if(!writeStatus.isEmpty()){
-                            status.pass = false;
-                            status.message = "Failed to create artifact: " + writeStatus;
-                            listener.getLogger().println(status.message);
-                        }
-                        listener.getLogger().println("Report ready");
-                    }
-                    else{
-                        listener.getLogger().println("DiveCloud test failed: " + status.message);
-                    }
-                }
-                else{
-                    status.pass = false;
-                    status.message = "DiveCloud test did not return anything - empty JSON message";
-                    listener.getLogger().println(status.message);
-                }
             }
 	        catch(SocketTimeoutException ex){
 		        listener.getLogger().println("No callback received - timing out. Please check on your test at Nouvola Divecloud");
@@ -315,6 +309,64 @@ public class NouvolaBuilder extends Builder {
                 listener.getLogger().println("Socket server error: " + ex);
                 status.pass = false;
             }
+        }
+        else{
+            // no webhook means poll for results
+            boolean finished = false;
+            listener.getLogger().println("Polling for results at: " + pollUrl + testId);
+            while(!finished){
+                status = sendHTTPRequest(pollUrl + testId, "GET", apiKey, null);
+                if(!status.pass){
+                    listener.getLogger().println(status.message);
+                    return status.pass;
+                }
+                jsonMsg = status.message;
+                status = parseJSONString(jsonMsg, "status");
+                if(!status.pass){
+                    listener.getLogger().println(status.message);
+                    return status.pass;
+                }
+                if(status.message.equals("Emailed")) finished = true;
+                else{
+                    int interval = 30; //default to 30 seconds
+                    if(!pollInterval.isEmpty()) interval = Integer.parseInt(pollInterval);
+                    try{
+                        Thread.sleep(interval * 1000);
+                    }
+                    catch(InterruptedException ex){
+                        listener.getLogger().println("Polling interrupted. Check test status at Nouvola DiveCloud");
+                        Thread.currentThread().interrupt();
+                        return false;
+                    }
+                }
+            }
+
+        }
+
+        
+        if(!jsonMsg.isEmpty()){
+            status = parseJSONString(jsonMsg, "outcome");
+            if(status.pass && status.message.equals("Pass")){
+                listener.getLogger().println("DiveCloud test passed");
+
+                // create artifact
+                String path = build.getProject().getWorkspace().toString() + "/" + results_file;
+                String writeStatus = writeToFile(path, jsonMsg);
+                if(!writeStatus.isEmpty()){
+                    status.pass = false;
+                    status.message = "Failed to create artifact: " + writeStatus;
+                    listener.getLogger().println(status.message);
+                }
+                listener.getLogger().println("Report ready");
+            }
+            else{
+                listener.getLogger().println("DiveCloud test failed: " + status.message);
+            }
+        }
+        else{
+            status.pass = false;
+            status.message = "DiveCloud test did not return anything - empty JSON message";
+            listener.getLogger().println(status.message);
         }
 
         return status.pass;
