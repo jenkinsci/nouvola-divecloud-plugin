@@ -30,7 +30,7 @@ public class NouvolaBuilder extends Builder {
     private final String planID;
     private final String apiKey;
     private final Secret credsPass;
-    private final String pollInterval;
+    private final String waitTime;
     private final String returnURL;
     private final String listenTimeOut;
 
@@ -38,13 +38,13 @@ public class NouvolaBuilder extends Builder {
     public NouvolaBuilder(String planID,
                           String apiKey,
                           String credsPass,
-                          String pollInterval,
+                          String waitTime,
                           String returnURL,
                           String listenTimeOut) {
         this.planID = planID;
         this.apiKey = apiKey;
         this.credsPass = Secret.fromString(credsPass);
-        this.pollInterval = pollInterval;
+        this.waitTime = waitTime;
         this.returnURL = returnURL;
         this.listenTimeOut = listenTimeOut;
     }
@@ -61,8 +61,8 @@ public class NouvolaBuilder extends Builder {
         return credsPass;
     }
 
-    public String getPollInterval(){
-        return pollInterval;
+    public String getWaitTime(){
+        return waitTime;
     }
 
     public String getReturnURL() {
@@ -317,9 +317,17 @@ public class NouvolaBuilder extends Builder {
         else{
             // no webhook means poll for results
             boolean finished = false;
-            int interval = 1; //default to 1 minute
-            if(!pollInterval.isEmpty()) interval = Integer.parseInt(pollInterval);
-            listener.getLogger().println("Polling for results at: " + pollUrl + testId + " at " + interval + " minutes...");
+            int wait = 1; //default to 1 minute
+            if(!waitTime.isEmpty()) wait = Integer.parseInt(waitTime);
+            listener.getLogger().println("Polling for results at: " + pollUrl + testId + " after " + wait + " minutes...");
+            try{
+                Thread.sleep(wait * 60000);
+            }
+            catch(InterruptedException ex){
+                listener.getLogger().println("Job interrupted. Check test status at Nouvola DiveCloud");
+                return false;
+            }
+            listener.getLogger().println("Polling started...");
             while(!finished){
                 status = sendHTTPRequest(pollUrl + testId, "GET", apiKey, null);
                 if(!status.pass){
@@ -335,7 +343,7 @@ public class NouvolaBuilder extends Builder {
                 if(status.message.equals("Emailed")) finished = true;
                 else{
                     try{
-                        Thread.sleep(interval * 60000);
+                        Thread.sleep(60000);
                     }
                     catch(InterruptedException ex){
                         listener.getLogger().println("Polling interrupted. Check test status at Nouvola DiveCloud");
@@ -353,20 +361,20 @@ public class NouvolaBuilder extends Builder {
             if(status.pass && status.message.equals("Pass")){
                 listener.getLogger().println("DiveCloud test passed");
 
-                // create artifact
-                String path = build.getProject().getWorkspace().toString() + "/" + results_file;
-                String link = results_begin + results_link + testId + results_middle + results_link + testId + results_end;
-                String writeStatus = writeToFile(path, link); //sub with sharable link
-                if(!writeStatus.isEmpty()){
-                    status.pass = false;
-                    status.message = "Failed to create artifact: " + writeStatus;
-                    listener.getLogger().println(status.message);
-                }
-                listener.getLogger().println("Report ready: " + link);
             }
             else{
                 listener.getLogger().println("DiveCloud test failed: " + status.message);
             }
+            // create artifact
+            String path = build.getProject().getWorkspace().toString() + "/" + results_file;
+            String link = results_begin + results_link + testId + results_middle + results_link + testId + results_end;
+            String writeStatus = writeToFile(path, link); //sub with sharable link
+            if(!writeStatus.isEmpty()){
+                status.pass = false;
+                status.message = "Failed to create artifact: " + writeStatus;
+                listener.getLogger().println(status.message);
+            }
+            listener.getLogger().println("Report ready: " + results_link + testId);
         }
         else{
             status.pass = false;
