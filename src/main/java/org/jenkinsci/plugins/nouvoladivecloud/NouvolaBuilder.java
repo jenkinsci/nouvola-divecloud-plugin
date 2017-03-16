@@ -362,7 +362,7 @@ public class NouvolaBuilder extends Builder {
                     status.message = "Failed to create artifact: " + writeStatus;
                     listener.getLogger().println(status.message);
                 }
-                listener.getLogger().println("Report ready");
+                listener.getLogger().println("Report ready: " + link);
             }
             else{
                 listener.getLogger().println("DiveCloud test failed: " + status.message);
