@@ -200,7 +200,11 @@ public class NouvolaBuilder extends Builder {
         String testId = "";
         String retURL = "";
         int listenPort = -1;
-        String results_file = "results.txt";
+        String results_begin = "<!DOCTYPE html><html><body>View test results: <a href='";
+        String results_link = "https://divecloud.nouvola.com/tests/"; //placeholder for now
+        String results_middle = "'>";
+        String results_end = "</a></body></html>";
+        String results_file = "results_link.html";
 
         // checks for return URL
         listener.getLogger().println("Checking return URL...");
@@ -313,7 +317,9 @@ public class NouvolaBuilder extends Builder {
         else{
             // no webhook means poll for results
             boolean finished = false;
-            listener.getLogger().println("Polling for results at: " + pollUrl + testId);
+            int interval = 1; //default to 1 minute
+            if(!pollInterval.isEmpty()) interval = Integer.parseInt(pollInterval);
+            listener.getLogger().println("Polling for results at: " + pollUrl + testId + " at " + interval + " minutes...");
             while(!finished){
                 status = sendHTTPRequest(pollUrl + testId, "GET", apiKey, null);
                 if(!status.pass){
@@ -328,10 +334,8 @@ public class NouvolaBuilder extends Builder {
                 }
                 if(status.message.equals("Emailed")) finished = true;
                 else{
-                    int interval = 30; //default to 30 seconds
-                    if(!pollInterval.isEmpty()) interval = Integer.parseInt(pollInterval);
                     try{
-                        Thread.sleep(interval * 1000);
+                        Thread.sleep(interval * 60000);
                     }
                     catch(InterruptedException ex){
                         listener.getLogger().println("Polling interrupted. Check test status at Nouvola DiveCloud");
@@ -351,7 +355,8 @@ public class NouvolaBuilder extends Builder {
 
                 // create artifact
                 String path = build.getProject().getWorkspace().toString() + "/" + results_file;
-                String writeStatus = writeToFile(path, jsonMsg);
+                String link = results_begin + results_link + testId + results_middle + results_link + testId + results_end;
+                String writeStatus = writeToFile(path, link); //sub with sharable link
                 if(!writeStatus.isEmpty()){
                     status.pass = false;
                     status.message = "Failed to create artifact: " + writeStatus;
