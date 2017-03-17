@@ -76,7 +76,7 @@ public class NouvolaBuilder extends Builder {
     /**
      * Object for process status and messages
      */
-    private class ProcessStatus{
+    private static class ProcessStatus{
         public boolean pass;
         public String message;
 
@@ -108,6 +108,7 @@ public class NouvolaBuilder extends Builder {
                     OutputStreamWriter writer = new OutputStreamWriter(conn.getOutputStream(), "UTF-8");
                     writer.write(data);
                     writer.flush();
+                    writer.close();
                 }
 
                 BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
@@ -115,7 +116,7 @@ public class NouvolaBuilder extends Builder {
                 String result = "";
 
                 while ((line = reader.readLine()) != null){
-                    result = result + line;
+                    result = result.concat(line);
 
                 }
                 reader.close();
@@ -193,7 +194,6 @@ public class NouvolaBuilder extends Builder {
     public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener) {
         ProcessStatus status;
         boolean isWebhook = false;
-        String urlParameters = "creds_pass=" + Secret.toString(credsPass);
         String registerUrl   = "https://divecloud.nouvola.com/api/v1/hooks";
         String triggerUrl = "https://divecloud.nouvola.com/api/v1/plans/" + planID + "/run";
         String pollUrl = "https://divecloud.nouvola.com/api/v1/test_instances/";
@@ -317,8 +317,8 @@ public class NouvolaBuilder extends Builder {
         else{
             // no webhook means poll for results
             boolean finished = false;
-            int wait = 1; //default to 1 minute
-            if(!waitTime.isEmpty()) wait = Integer.parseInt(waitTime);
+            long wait = 1; //default to 1 minute
+            if(!waitTime.isEmpty()) wait = Long.parseLong(waitTime);
             listener.getLogger().println("Polling for results at: " + pollUrl + testId + " after " + wait + " minutes...");
             try{
                 Thread.sleep(wait * 60000);
@@ -355,7 +355,6 @@ public class NouvolaBuilder extends Builder {
 
         }
 
-        
         if(!jsonMsg.isEmpty()){
             status = parseJSONString(jsonMsg, "outcome");
             if(status.pass && status.message.equals("Pass")){
