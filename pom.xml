@@ -15,7 +15,7 @@
   </properties>
   <groupId>org.jenkins-ci.plugins</groupId>
   <artifactId>nouvola-divecloud</artifactId>
-  <version>1.06-SNAPSHOT</version>
+  <version>1.07-SNAPSHOT</version>
   <packaging>hpi</packaging>
   <url>https://wiki.jenkins-ci.org/display/JENKINS/Nouvola+DiveCloud+Plugin</url>
 
