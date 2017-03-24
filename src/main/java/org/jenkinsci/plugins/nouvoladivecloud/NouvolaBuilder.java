@@ -201,7 +201,6 @@ public class NouvolaBuilder extends Builder {
         String retURL = "";
         int listenPort = -1;
         String results_begin = "<!DOCTYPE html><html><body>View test results: <a href='";
-        String results_link = "https://divecloud.nouvola.com/tests/"; //placeholder for now
         String results_middle = "'>";
         String results_end = "</a></body></html>";
         String results_file = "results_link.html";
@@ -366,14 +365,19 @@ public class NouvolaBuilder extends Builder {
             }
             // create artifact
             String path = build.getProject().getWorkspace().toString() + "/" + results_file;
-            String link = results_begin + results_link + testId + results_middle + results_link + testId + results_end;
-            String writeStatus = writeToFile(path, link); //sub with sharable link
+            ProcessStatus link = parseJSONString(jsonMsg, "shareable_link");
+            if(!link.pass){
+                listener.getLogger().println(link.message);
+                return false;
+            }
+            String file_conts = results_begin + link.message + results_middle + link.message + results_end;
+            String writeStatus = writeToFile(path, file_conts);
             if(!writeStatus.isEmpty()){
                 status.pass = false;
                 status.message = "Failed to create artifact: " + writeStatus;
                 listener.getLogger().println(status.message);
             }
-            listener.getLogger().println("Report ready: " + results_link + testId);
+            listener.getLogger().println("Report ready: " + link.message);
         }
         else{
             status.pass = false;
