@@ -362,6 +362,7 @@ public class NouvolaBuilder extends Builder {
             }
             else{
                 listener.getLogger().println("DiveCloud test failed: " + status.message);
+                status.pass = false;
             }
             // create artifact
             String path = build.getProject().getWorkspace().toString() + "/" + results_file;
